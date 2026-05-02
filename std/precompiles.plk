@@ -1,0 +1,20 @@
+import std::fixedbytes::bytes32;
+import std::addr::{addr, raw_call};
+import std::mem::unsafe_mem_read_u256;
+import std::membytes::{membytes, membytes_new, membytes_write_u256};
+
+const ECRECOVER = 0x01;
+
+const ecrecover = fn (hash: bytes32, v: u256, r: u256, s: u256) addr {
+    let calldata = membytes { ptr: @malloc_uninit(128), len: 128 };
+    membytes_write_u256(calldata, 0, hash.raw);
+    membytes_write_u256(calldata, 32, v);
+    membytes_write_u256(calldata, 64, r);
+    membytes_write_u256(calldata, 96, s);
+
+    if @evm_staticcall(@evm_gas(), ECRECOVER, calldata.ptr, calldata.len, 0x00, 32) == 0 {
+        @evm_revert(@malloc_uninit(0), 0);
+    }
+
+    addr { raw: unsafe_mem_read_u256(0x00, 0) }
+};
