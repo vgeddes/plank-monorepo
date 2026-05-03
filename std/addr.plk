@@ -1,5 +1,5 @@
 import std::fixedbytes::bytes32;
-import std::membytes::{membytes, membytes_new};
+import std::membytes::{membytes, membytes_new, membytes_from_ptr};
 import std::option::Option;
 
 const addr = struct { raw: u256 };
@@ -33,68 +33,79 @@ const raw_create2 = fn (value: u256, code: membytes, salt: bytes32) addr {
     addr { raw: account }
 };
 
+const CallOptions = struct {
+    // defaults to available gas if zero
+    gas: u256,
+    // defaults to zero
+    value: u256,
+    // defaults to false
+    is_static: bool,
+    // defaults to false
+    is_delegate: bool,
+};
+
+const CallResult = struct {
+    success: bool,
+    out: membytes,
+};
+
 const raw_call = fn (
     target: addr,
-    value: u256,
-    gas: u256,
     calldata: membytes,
-    return_buf: Option(membytes)
-) bool {
-    if return_buf.is_some {
-        @evm_call(
-            gas,
-            target.raw,
-            value,
-            calldata.ptr,
-            calldata.len,
-            return_buf.inner.ptr,
-            return_buf.inner.len
-        )
+    options: Option(CallOptions)
+) CallResult {
+    let gas = if options.is_some and options.inner.gas > 0 {
+        options.inner.gas
+    } else {
+        0
+    };
+
+    let value = if options.is_some and options.inner.value > 0 {
+        options.inner.value
+    } else {
+        0
+    };
+
+    let is_static = if options.is_some and options.inner.is_static {
+        true
+    } else {
+        false
+    };
+
+    let is_delegate = if options.is_some and options.inner.is_delegate {
+        true
+    } else {
+        false
+    };
+
+    if is_static and is_delegate {
+        @evm_revert(@malloc_uninit(0), 0);
+    }
+
+    let out_ptr: memptr = if out_size > 0 {
+        @malloc_zeroed(out_size)
+    } else {
+        0x00
+    };
+
+    if gas == 0 {
+        gas == @evm_gas();
+    }
+
+    let ok = if is_static {
+        @evm_staticcall(gas, target.raw, calldata.ptr, calldata.len, 0, 0)
+    } else if is_delegate {
+        @evm_delegatecall(gas, target.raw, calldata.ptr, calldata.len, 0, 0)
     } else {
         @evm_call(gas, target.raw, value, calldata.ptr, calldata.len, 0, 0)
-    }
-};
+    };
 
-const raw_staticcall = fn (
-    target: addr,
-    value: u256,
-    gas: u256,
-    calldata: membytes,
-    return_buf: Option(membytes)
-) bool {
-    if return_buf.is_some {
-        @evm_staticcall(
-            gas,
-            target.raw,
-            value,
-            calldata.ptr,
-            calldata.len,
-            return_buf.inner.ptr,
-            return_buf.inner.len
-        )
-    } else {
-        @evm_staticcall(gas, target.raw, value, calldata.ptr, calldata.len, 0, 0)
-    }
-};
+    let returndata_size = @evm_returndatasize();
+    let returndata = membytes { ptr: @membytes_uninit(returndata_size), len: returndata_size };
+    @evm_returndatacopy(returndata.ptr, 0, returndata.len);
 
-const raw_delegatecall = fn (
-    delegate: addr,
-    value: u256,
-    gas: u256,
-    calldata: membytes,
-    return_buf: Option(membytes)
-) bool {
-    if return_buf.is_some {
-        @evm_delegatecall(
-            gas,
-            delegate.raw,
-            value,
-            calldata.ptr,
-            calldata.len,
-            return_buf.inner.ptr,
-            return_buf.inner.len
-        )
-    } else {
-        @evm_delegatecall(gas, delegate.raw, value, calldata.ptr, calldata.len, 0, 0)
+    CallResult {
+        success: ok,
+        out: returndata,
     }
 };
