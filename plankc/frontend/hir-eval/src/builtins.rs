@@ -57,7 +57,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                     LocalState::Runtime(_) if this.is_comptime() => {
                         let use_loc = this.loc(expr_span);
                         let def_loc = this.origin_loc(arg_origin);
-                        this.eval.diag().emit_runtime_ref_in_comptime(use_loc, def_loc);
+                        this.diag().emit_runtime_ref_in_comptime(use_loc, def_loc);
                         return Err(Poisoned);
                     }
                     LocalState::Runtime(_) => return Ok(None),
@@ -100,7 +100,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
 
         if self.is_comptime() {
             let loc = self.loc(expr_span);
-            self.eval.diag().emit_unsupported_eval_of_runtime_builtin(builtin, loc);
+            self.diag().emit_unsupported_eval_of_runtime_builtin(builtin, loc);
             if result_type == Ok(TypeId::NEVER) || poisoned_never {
                 return Ok(Err(Diverge::ControlFlowPoisoned));
             } else {
@@ -131,7 +131,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             let arg_types = &this.eval.types_buf[types_buf_offset..];
             builtin_sigs::resolve_result_type(builtin.into(), arg_types).ok_or_else(|| {
                 let arg_types: Vec<_> = this.eval.types_buf[types_buf_offset..].to_vec();
-                this.eval.diag().emit_no_matching_builtin_signature(
+                this.diag().emit_no_matching_builtin_signature(
                     builtin.into(),
                     &arg_types,
                     expr_loc,
@@ -184,7 +184,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         let expr_loc = self.loc(expr_span);
 
         if builtin_sigs::arg_count(builtin) != args.len() {
-            self.eval.diag().emit_wrong_arg_count(builtin, args.len(), expr_loc);
+            self.diag().emit_wrong_arg_count(builtin, args.len(), expr_loc);
             return Err(Poisoned);
         }
 
@@ -269,14 +269,14 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 let LocalState::Comptime(quota_value) = state else {
                     let use_loc = self.loc(expr_span);
                     let def_loc = self.origin_loc(arg_origin);
-                    self.eval.diag().emit_runtime_ref_in_comptime(use_loc, def_loc);
+                    self.diag().emit_runtime_ref_in_comptime(use_loc, def_loc);
                     return Err(Poisoned);
                 };
                 let requested_quota = match self.values.lookup(quota_value) {
                     Value::BigNum(requested_quota) => requested_quota,
                     other => {
                         let arg_ty = other.get_type();
-                        self.eval.diag().emit_no_matching_builtin_signature(
+                        self.diag().emit_no_matching_builtin_signature(
                             builtin,
                             &[arg_ty],
                             expr_loc,
@@ -286,7 +286,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 };
                 let Ok(requested_quota) = u32::try_from(requested_quota) else {
                     let loc = self.loc(arg_use_span);
-                    self.eval.diag().emit_eval_branch_quota_too_large(loc);
+                    self.diag().emit_eval_branch_quota_too_large(loc);
                     return Err(Poisoned);
                 };
                 self.comptime_quota.raise_limit(requested_quota);
@@ -299,7 +299,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 let message = self.expect_bytes_arg(message, builtin, expr_span)?;
                 let message = self.eval.session.lookup_bytes_lossy(message);
                 let loc = self.loc(expr_span);
-                self.eval.diag().emit_custom_comptime_error(message, loc);
+                self.diag().emit_custom_comptime_error(message, loc);
                 Ok(Err(Diverge::ControlFlowPoisoned))
             }
             Builtin::SliceCBytes => {
@@ -309,7 +309,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 let end = self.expect_comptime_u256(end, builtin, "slice end", expr_span)?;
                 let len = bytes.len();
                 if start > end || end > U256::from(len) {
-                    self.eval.diag().emit_bytes_slice_out_of_bounds(start, end, len, expr_loc);
+                    self.diag().emit_bytes_slice_out_of_bounds(start, end, len, expr_loc);
                     return Err(Poisoned);
                 }
                 let start = u32::try_from(start).expect("start <= end <= len which fits u32");
@@ -363,7 +363,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 let &[bytes] = args else { unreachable!("arg count checked") };
                 let bytes = self.expect_bytes_arg(bytes, builtin, expr_span)?;
                 if self.is_comptime() {
-                    self.eval.diag().emit_data_offset_in_comptime(expr_loc);
+                    self.diag().emit_data_offset_in_comptime(expr_loc);
                     return Err(Poisoned);
                 }
                 Ok(Ok(EvalValue::Runtime {
@@ -387,7 +387,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
     ) -> MaybePoisoned<Result<EvalValue, Diverge>> {
         if builtin_sigs::arg_count(builtin) != args.len() {
             let loc = self.loc(expr);
-            self.eval.diag().emit_wrong_arg_count(builtin, args.len(), loc);
+            self.diag().emit_wrong_arg_count(builtin, args.len(), loc);
             return Err(Poisoned);
         }
 
@@ -477,7 +477,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 Compound::Struct(r#struct) => {
                     let field = r#struct.fields[field_index];
                     let actual_loc = self.loc(new_value_span);
-                    self.eval.diag().emit_type_mismatch(
+                    self.diag().emit_type_mismatch(
                         field_ty,
                         SrcLoc::new(r#struct.def_loc.source, field.def_span),
                         actual_ty,
@@ -487,7 +487,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 }
                 Compound::Tuple(_) => {
                     let loc = self.loc(expr_span);
-                    self.eval.diag().emit_type_mismatch_simple(field_ty, actual_ty, loc);
+                    self.diag().emit_type_mismatch_simple(field_ty, actual_ty, loc);
                 }
             }
             return Err(Poisoned);
@@ -516,7 +516,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
 
         if self.eval.types.is_comptime_only(instance_ty) {
             let loc = self.loc(self.bindings[field_value].use_span);
-            self.eval.diag().emit_set_field_on_comptime_only(instance_ty, loc, compound);
+            self.diag().emit_set_field_on_comptime_only(instance_ty, loc, compound);
             return Err(Poisoned);
         }
 
@@ -568,14 +568,14 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         let flags = self.types.lookup(ty).flags();
         if flags.contains(TypeFlags::UNINIT_INCOMPATIBLE) {
             let expr = self.loc(expr_span);
-            self.eval.diag().emit_uninit_incompatible_type(ty, expr);
+            self.diag().emit_uninit_incompatible_type(ty, expr);
             return Err(Poisoned);
         }
 
         if flags.contains(TypeFlags::RUNTIME_ONLY) {
             if self.is_comptime() {
                 let loc = self.loc(expr_span);
-                self.eval.diag().emit_uninit_memptr_in_comptime(loc);
+                self.diag().emit_uninit_memptr_in_comptime(loc);
                 return Err(Poisoned);
             }
             return Ok(Ok(self.emit_uninit_runtime(ty)));
@@ -599,7 +599,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         let LocalState::Comptime(tuple_vid) = state else {
             let use_loc = self.loc(expr_span);
             let def_loc = self.origin_loc(origin);
-            self.eval.diag().emit_runtime_ref_in_comptime(use_loc, def_loc);
+            self.diag().emit_runtime_ref_in_comptime(use_loc, def_loc);
             return Err(Poisoned);
         };
 
@@ -608,7 +608,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             _ => {
                 let actual_ty = self.values.type_of_value(tuple_vid);
                 let loc = self.loc(expr_span);
-                self.eval.diag().emit_concat_cbytes_expected_tuple(actual_ty, loc);
+                self.diag().emit_concat_cbytes_expected_tuple(actual_ty, loc);
                 return Err(Poisoned);
             }
         };
@@ -627,7 +627,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                 other => {
                     let arg_ty = other.get_type();
                     let loc = self.loc(expr_span);
-                    self.eval.diag().emit_concat_cbytes_invalid_element(arg_ty, loc);
+                    self.diag().emit_concat_cbytes_invalid_element(arg_ty, loc);
                     contains_invalid = true;
                 }
             }
@@ -739,7 +739,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         let state = selector_binding.state?;
         let LocalState::Comptime(selector) = state else {
             let loc = self.loc(expr_span);
-            self.eval.diag().emit_expected_comptime_arg(builtin, "field selector", loc);
+            self.diag().emit_expected_comptime_arg(builtin, "field selector", loc);
             return Err(Poisoned);
         };
 
@@ -756,17 +756,12 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             Value::Bytes(name) => {
                 let Compound::Struct(r#struct) = compound else {
                     let loc = self.loc(selector_binding.use_span);
-                    self.eval.diag().emit_invalid_field_selector_type(
-                        builtin,
-                        ty,
-                        TypeId::CBYTES,
-                        loc,
-                    );
+                    self.diag().emit_invalid_field_selector_type(builtin, ty, TypeId::CBYTES, loc);
                     return Err(Poisoned);
                 };
                 let Some(field_index) = self.find_struct_field_by_name(r#struct, name) else {
                     let loc = self.loc(selector_binding.use_span);
-                    self.eval.diag().emit_unknown_field_name_selector(builtin, ty, name, loc);
+                    self.diag().emit_unknown_field_name_selector(builtin, ty, name, loc);
                     return Err(Poisoned);
                 };
                 Ok((Compound::Struct(r#struct), field_index))
@@ -774,7 +769,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             other => {
                 let arg_ty = other.get_type();
                 let loc = self.loc(selector_binding.use_span);
-                self.eval.diag().emit_invalid_field_selector_type(builtin, ty, arg_ty, loc);
+                self.diag().emit_invalid_field_selector_type(builtin, ty, arg_ty, loc);
                 Err(Poisoned)
             }
         }
@@ -791,7 +786,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             Ok(index) if index < field_count => Ok(index),
             _ => {
                 let loc = self.loc(self.bindings[index_arg].use_span);
-                self.eval.diag().emit_field_index_out_of_bounds(builtin, index, field_count, loc);
+                self.diag().emit_field_index_out_of_bounds(builtin, index, field_count, loc);
                 Err(Poisoned)
             }
         }
@@ -811,7 +806,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         }
         let actual_ty = self.state_type(state);
         let loc = self.loc(span);
-        self.eval.diag().emit_expected_type_arg(builtin, actual_ty, loc);
+        self.diag().emit_expected_type_arg(builtin, actual_ty, loc);
         Err(Poisoned)
     }
 
@@ -829,7 +824,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         }
         let actual_ty = self.state_type(state);
         let loc = self.loc(span);
-        self.eval.diag().emit_no_matching_builtin_signature(builtin, &[actual_ty], loc);
+        self.diag().emit_no_matching_builtin_signature(builtin, &[actual_ty], loc);
         Err(Poisoned)
     }
 
@@ -844,13 +839,13 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         let state = arg_binding.state?;
         let LocalState::Comptime(vid) = state else {
             let loc = self.loc(span);
-            self.eval.diag().emit_expected_comptime_arg(builtin, arg_name, loc);
+            self.diag().emit_expected_comptime_arg(builtin, arg_name, loc);
             return Err(Poisoned);
         };
         let Value::BigNum(n) = self.values.lookup(vid) else {
             let actual_ty = self.eval.values.type_of_value(vid);
             let loc = self.loc(arg_binding.use_span);
-            self.eval.diag().emit_type_mismatch_simple(TypeId::U256, actual_ty, loc);
+            self.diag().emit_type_mismatch_simple(TypeId::U256, actual_ty, loc);
             return Err(Poisoned);
         };
         Ok(n)
@@ -866,7 +861,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             Type::Compound(compound) => Ok(compound),
             _ => {
                 let loc = self.loc(span);
-                self.eval.diag().emit_expected_compound_type_arg(builtin, ty, loc);
+                self.diag().emit_expected_compound_type_arg(builtin, ty, loc);
                 Err(Poisoned)
             }
         }
@@ -882,7 +877,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             Type::Compound(Compound::Struct(r#struct)) => Ok(r#struct),
             _ => {
                 let loc = self.loc(span);
-                self.eval.diag().emit_expected_struct_type_arg(builtin, ty, loc);
+                self.diag().emit_expected_struct_type_arg(builtin, ty, loc);
                 Err(Poisoned)
             }
         }
