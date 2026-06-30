@@ -130,7 +130,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
 
             let arg_types = &this.eval.types_buf[types_buf_offset..];
             builtin_sigs::resolve_result_type(builtin.into(), arg_types).ok_or_else(|| {
-                let arg_types: Vec<_> = this.eval.types_buf[types_buf_offset..].to_vec();
+                let arg_types = this.eval.types_buf[types_buf_offset..].to_vec();
                 this.diag().emit_no_matching_builtin_signature(
                     builtin.into(),
                     &arg_types,
@@ -331,8 +331,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
                     Ok(offset) if offset <= slice.len() => offset,
                     _ => {
                         let slice_len = slice.len();
-                        self.eval
-                            .diag()
+                        self.diag()
                             .emit_cbytes_read_offset_out_of_bounds(offset, slice_len, expr_loc);
                         return Err(Poisoned);
                     }
