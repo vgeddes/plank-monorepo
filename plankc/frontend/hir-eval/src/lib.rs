@@ -60,6 +60,13 @@ pub fn evaluate(
         let _ = evaluator.evaluate_const(const_id);
     }
 
+    // A leftover `@compile_log` fails the build, but only when nothing else already has
+    if let Some(first_loc) = evaluator.session.compile_logs().first().map(|log| log.loc)
+        && !evaluator.session.has_errors()
+    {
+        evaluator.diag().emit_found_compile_log(first_loc);
+    }
+
     Mir {
         blocks: evaluator.mir_blocks,
         args: evaluator.mir_args,

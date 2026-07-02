@@ -92,6 +92,7 @@ pub fn builtin_signatures(builtin: Builtin) -> &'static [BuiltinSignature] {
         B::Runtime(RB::Shl) => &[sig!([U256, U256 => U256])],
         B::Runtime(RB::Shr) => &[sig!([U256, U256 => U256])],
         B::Runtime(RB::Sar) => &[sig!([U256, U256 => U256])],
+        B::Runtime(RB::Clz) => &[sig!([U256 => U256])],
 
         // Runtime only
         B::Runtime(RB::Keccak256) => &[sig!([MP, U256 => U256])],
@@ -236,9 +237,13 @@ pub fn builtin_signatures(builtin: Builtin) -> &'static [BuiltinSignature] {
         B::ActiveEvmVersion => &[sig!([=> U256])],
 
         // Comptime dynamic — no fixed signatures
-        B::FieldType | B::TypeIndex | B::GetField | B::SetField | B::Uninit | B::ConcatCBytes => {
-            &[]
-        }
+        B::FieldType
+        | B::TypeIndex
+        | B::GetField
+        | B::SetField
+        | B::Uninit
+        | B::ConcatCBytes
+        | B::CompileLog => &[],
     }
 }
 

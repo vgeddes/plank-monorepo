@@ -3,7 +3,8 @@ use plank_core::Span;
 use plank_hir::{self as hir, operators::BinaryOp};
 use plank_session::{Builtin, builtins::builtin_names, diagnostic::fmt_count, *};
 use plank_values::{
-    Compound, FmtType, StructRef, TupleRef, Type, TypeFlags, TypeId, TypeInterner, ValueInterner,
+    Compound, FmtType, StructRef, TupleRef, Type, TypeFlags, TypeId, TypeInterner, ValueId,
+    ValueInterner,
     builtins as builtin_sigs,
 };
 
@@ -584,6 +585,26 @@ impl DiagEmitView<'_> {
             .emit(self);
     }
 
+    pub fn emit_builtin_requires_evm_version(
+        &mut self,
+        builtin: RuntimeBuiltin,
+        active: plank_evm::EvmVersion,
+        required: plank_evm::EvmVersion,
+        loc: SrcLoc,
+    ) {
+        Diagnostic::error(format!(
+            "builtin `{}` requires EVM version `{required}` or later",
+            builtin.name()
+        ))
+        .primary(
+            loc.source,
+            loc.span,
+            format!("not available in the active EVM version `{active}`"),
+        )
+        .note(format!("recompile with `--evm-version {required}` or later"))
+        .emit(self);
+    }
+
     pub fn emit_custom_comptime_error(&mut self, message: impl Into<String>, loc: SrcLoc) {
         Diagnostic::error(message)
             .primary(loc.source, loc.span, "custom compile error triggered here")
@@ -1078,5 +1099,19 @@ impl DiagEmitView<'_> {
         Diagnostic::error(format!("failed to resolve core operation handler `{op_name}`"))
             .element(Element::Origin { path: source })
             .emit(self);
+    }
+
+    pub fn emit_found_compile_log(&mut self, first_loc: SrcLoc) {
+        Diagnostic::error("found compile log statement")
+            .element(
+                Annotations::new(first_loc.source)
+                    .no_label(first_loc.span, AnnotationKind::Primary),
+            )
+            .emit(self);
+    }
+
+    pub fn record_compile_log(&mut self, value_id: ValueId, loc: SrcLoc) {
+        let msg = self.values.format_value(self.session, self.types, value_id).to_string();
+        self.session.emit_compile_log(CompileLog { loc, msg });
     }
 }

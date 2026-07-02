@@ -208,6 +208,7 @@ define_builtins! {
         SHL "@evm_shl" => Shl;
         SHR "@evm_shr" => Shr;
         SAR "@evm_sar" => Sar;
+        CLZ "@evm_clz" => Clz;
     }
 
     runtime_only_builtins {
@@ -381,6 +382,7 @@ define_builtins! {
         SET_FIELD "@set_field" => SetField(3);
         UNINIT "@uninit" => Uninit(1);
         CONCAT_CBYTES "@concat_cbytes" => ConcatCBytes(1);
+        COMPILE_LOG "@compile_log" => CompileLog(1);
     }
 
     builtin_attribute {

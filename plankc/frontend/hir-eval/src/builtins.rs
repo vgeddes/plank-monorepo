@@ -1,5 +1,6 @@
 use crate::scope::{Diverge, EvalValue, LocalState, Scope};
 use alloy_primitives::U256;
+use plank_evm::EvmVersion;
 use plank_hir as hir;
 use plank_mir as mir;
 use plank_session::{
@@ -22,6 +23,19 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         let args = &self.eval.hir.args[args];
         match builtin {
             Builtin::Runtime(runtime) => {
+                if let Some(required) = runtime_builtin_min_evm_version(runtime)
+                    && self.eval.evm_version < required
+                {
+                    let active = self.eval.evm_version;
+                    let loc = self.loc(expr_span);
+                    self.diag().emit_builtin_requires_evm_version(
+                        runtime,
+                        active,
+                        required,
+                        loc,
+                    );
+                    return Err(Poisoned);
+                }
                 if runtime.foldable() {
                     self.eval_runtime_foldable_builtin(runtime, args, expr_span)
                 } else {
@@ -397,6 +411,7 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
             Builtin::SetField => self.eval_set_field(args, builtin, expr),
             Builtin::Uninit => self.eval_uninit(args, builtin, expr),
             Builtin::ConcatCBytes => self.eval_concat_cbytes(args, expr),
+            Builtin::CompileLog => self.eval_compile_log(args, expr),
             _ => unreachable!("not a comptime dynamic builtin: {builtin}"),
         }
     }
@@ -642,6 +657,25 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
         let cbytes = self.eval.session.intern_cbytes(&buf);
         let value = self.eval.values.intern_bytes(cbytes.contents, cbytes.start, cbytes.end);
         Ok(Ok(EvalValue::Comptime(value)))
+    }
+
+    fn eval_compile_log(
+        &mut self,
+        args: &[hir::LocalId],
+        expr_span: SourceSpan,
+    ) -> MaybePoisoned<Result<EvalValue, Diverge>> {
+        let &[obj] = args else { unreachable!("arg count checked") };
+        let (state, _, origin) = self.bindings[obj].poisoned()?;
+        let LocalState::Comptime(obj_vid) = state else {
+            let expr_loc = self.loc(expr_span);
+            let origin_loc = self.origin_loc(origin);
+            self.diag().emit_runtime_ref_in_comptime(expr_loc, origin_loc);
+            return Err(Poisoned);
+        };
+
+        let loc = self.loc(expr_span);
+        self.diag().record_compile_log(obj_vid, loc);
+        Ok(Ok(EvalValue::Comptime(ValueId::VOID)))
     }
 
     /// Emits MIR instructions for a runtime uninit value (memptr or struct containing memptr).
@@ -899,6 +933,13 @@ impl<'a, 'ctx> Scope<'a, 'ctx> {
     }
 }
 
+fn runtime_builtin_min_evm_version(builtin: RuntimeBuiltin) -> Option<EvmVersion> {
+    match builtin {
+        RuntimeBuiltin::Clz => Some(EvmVersion::Osaka),
+        _ => None,
+    }
+}
+
 pub(crate) fn fold_runtime_builtin(
     builtin: RuntimeBuiltin,
     args: &[ValueId],
@@ -911,6 +952,7 @@ pub(crate) fn fold_runtime_builtin(
             match builtin {
                 RuntimeBuiltin::IsZero => U256::from(plank_evm::iszero(a)),
                 RuntimeBuiltin::Not => plank_evm::not(a),
+                RuntimeBuiltin::Clz => plank_evm::clz(a),
                 _ => unreachable!("not a unary foldable builtin: {builtin}"),
             }
         }
