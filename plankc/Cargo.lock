@@ -2035,6 +2035,7 @@ version = "0.1.0"
 dependencies = [
  "allocator-api2",
  "alloy-primitives",
+ "hashbrown 0.16.1",
 ]
 
 [[package]]
@@ -2158,8 +2159,6 @@ name = "plank-session"
 version = "0.1.0"
 dependencies = [
  "annotate-snippets",
- "bumpalo",
- "hashbrown 0.16.1",
  "plank-core",
 ]
 
